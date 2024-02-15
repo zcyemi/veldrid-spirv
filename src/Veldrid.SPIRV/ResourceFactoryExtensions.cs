@@ -86,6 +86,59 @@ namespace Veldrid.SPIRV
             return new Shader[] { vertexShader, fragmentShader };
         }
 
+        public static Shader[] CreateFromSpirvEx(
+            this ResourceFactory factory,
+            ShaderDescription vertexShaderDescription,
+            ShaderDescription fragmentShaderDescription,
+            CrossCompileOptions options,out VertexFragmentCompilationResult result)
+        {
+            GraphicsBackend backend = factory.BackendType;
+
+            CrossCompileTarget target = GetCompilationTarget(factory.BackendType);
+            VertexFragmentCompilationResult compilationResult = SpirvCompilation.CompileVertexFragment(
+                vertexShaderDescription.ShaderBytes,
+                fragmentShaderDescription.ShaderBytes,
+                target,
+                options);
+
+            result = compilationResult;
+
+            if (backend == GraphicsBackend.Vulkan)
+            {
+                vertexShaderDescription.ShaderBytes = EnsureSpirv(vertexShaderDescription);
+                fragmentShaderDescription.ShaderBytes = EnsureSpirv(fragmentShaderDescription);
+
+                return new Shader[]
+                {
+                    factory.CreateShader(ref vertexShaderDescription),
+                    factory.CreateShader(ref fragmentShaderDescription)
+                };
+            }
+
+           
+
+            string vertexEntryPoint = (backend == GraphicsBackend.Metal && vertexShaderDescription.EntryPoint == "main")
+                ? "main0"
+                : vertexShaderDescription.EntryPoint;
+            byte[] vertexBytes = GetBytes(backend, compilationResult.VertexShader);
+            Shader vertexShader = factory.CreateShader(new ShaderDescription(
+                vertexShaderDescription.Stage,
+                vertexBytes,
+                vertexEntryPoint));
+
+            string fragmentEntryPoint = (backend == GraphicsBackend.Metal && fragmentShaderDescription.EntryPoint == "main")
+                ? "main0"
+                : fragmentShaderDescription.EntryPoint;
+            byte[] fragmentBytes = GetBytes(backend, compilationResult.FragmentShader);
+            Shader fragmentShader = factory.CreateShader(new ShaderDescription(
+                fragmentShaderDescription.Stage,
+                fragmentBytes,
+                fragmentEntryPoint));
+
+            return new Shader[] { vertexShader, fragmentShader };
+        }
+
+
         /// <summary>
         /// Creates a compute shader from the given <see cref="ShaderDescription"/> containing SPIR-V bytecode or GLSL source
         /// code.
